@@ -220,17 +220,17 @@ class HP4195A():
             print 'mode needs to be either "lin" or "log"!'
             return False
 
-        sweep_time = self.get_sweep_time()
+        #sweep_time = self.get_sweep_time()
         
-        print 'sending trigger to network analyzer, and wait to finish'
-        print 'estimated waiting time: %.2f s' % sweep_time
-        self.send_trigger()
+        #print 'sending trigger to network analyzer, and wait to finish'
+        #print 'estimated waiting time: %.2f s' % sweep_time
+        #self.send_trigger()
         #qt.msleep(sweep_time)
     
         print 'readout network analyzer'
         reply = self.read_register(trace)
         reply = numpy.array(reply)
-    
+
         return (freqs, reply)
 
     def save_trace(self, filepath=None, plot=True):

@@ -20,16 +20,21 @@ traceB=myvna.get_trace('lin','B')
 #print traceB[1]
 #print traceA[0]
 
-impedance=rf.network.Network(name='Z_PDN',comments='4W_Z11')
-impedance.f, impedance.s,impedance.z0 = traceA[0][0:10],traceA[1][0:10],[50]
 
+
+data=traceA[1][1:100]+1j*(traceB[1][1:100])
+print data
+#print traceA[0].shape
+impedance=rf.network.Network(name='Z_PDN',comments='4W_Z11')
+impedance.f, impedance.z,impedance.z0 = traceA[0][1:100],data,[50+0.j]
+#impedance.z.
 #impedance.f=traceA[0]
 #impedance.z=traceA[1]
 #impedance.s_deg=traceB[1]
-print impedance.z_mag
+#print impedance.z_mag
 #impedance.plot_it_all()
 
-impedance.plot_s_mag()
+impedance.plot_z_mag()
 #impedance.plot_s_deg()
-plot=rf.plotting.plot_rectangular(impedance.f,x_label='F',y_label='Ohms',title='PDN meas',show_legend=True, axis='tight', ax=None)
+#plot=rf.plotting.plot_rectangular(impedance.f,x_label='F',y_label='Ohms',title='PDN meas',show_legend=True, axis='tight', ax=None)
 show()

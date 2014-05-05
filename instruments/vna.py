@@ -15,6 +15,7 @@ class HP4195(GpibInstrument):
     def __init__(self, address=17,**kwargs):
         GpibInstrument.__init__(self,'GPIB::'+str(address),values_format = visa.single|visa.big_endian,**kwargs)
         self.timeout = 30
+        self.echo=False
 
     def write(self, msg, *args, **kwargs):
         '''
@@ -140,9 +141,10 @@ class HP4195(GpibInstrument):
 
     @property
     def frequency(self, unit='hz'):
-        freq=Frequency( float(self.ask('FMT1;START?')),
-                float(self.ask('FMT1;STOP?'))),\
-                int(float(self.ask('FMT1;NOP?')),'hz')
+        freq=Frequency( float(self.ask('FMT1;START?')),\
+                float(self.ask('FMT1;STOP?')),\
+                int(float(self.ask('FMT1;NOP?'))),\
+                'hz')
         freq.unit = unit
         return freq
 
@@ -530,13 +532,19 @@ class HP4195(GpibInstrument):
         '''
         self.continuous = False
         self.send_trigger()
-        sa = npy.array(self.read_register('A')) #MAG
-        sb = npy.array(self.read_register('B')) #Phase
-        #s.shape=(-1,2)
-        s=npy.vstack((sa,sb))
-        #s =  s[:,0]+1j*s[:,1]
+        db_data = npy.array(self.read_register('A')) #MAG
+        deg_data = npy.array(self.read_register('B')) #Phase
+
+        data=npy.vstack((db_data,deg_data))
+        data.shape=(-1,2)                                                                                        #ordering the data hopefully for integration into a skrf network
+        #print data
+        #print data.shape
+        blah_spar=data[:,0]+1j*data[:,1]                                                                   #stolen from the skrf vna lib
+        blah_spar.shape=(-1,1,1)
         ntwk = Network()
-        ntwk.s = s
+        ntwk.s = blah_spar
+        #ntwk.s_db=db_data
+        #ntwk.s_deg=deg_data
         ntwk.frequency= self.frequency
         self.continuous  = True
         return ntwk

@@ -1,30 +1,17 @@
-#from HP4195A import HP4195A
 import skrf as rf
 from pylab import *
 from instruments import HP4195
 
 
 myvna=HP4195(address=17)
-myvna.reset()
+#myvna.reset()
+s11=myvna.s11
+print s11
+print s11.s_mag
+print s11.s_deg
+s11.plot_s_deg()
+show()
 
-
-#import visa
-#rm = visa.ResourceManager()
-#print rm.list_resources()
-#vna4195 = rm.get_instrument('GPIB0::17::INSTR',values_format=0x01+0x04)
-#vna4195.write("GRT0")
-
-
-#myvna= HP4195A(name='myvna',address='GPIB0::17::INSTR',reset=False)
-#myvna.default_init()
-#print myvna.get_start_freq()
-#print myvna.get_stop_freq()
-#traceA=myvna.get_trace('lin','A')
-#traceB=myvna.get_trace('lin','B')
-# tupple  (f,data) / f is array of frequency / data is array of data
-#print traceA[1]
-#print traceB[1]
-#print traceA[0]
 
 
 

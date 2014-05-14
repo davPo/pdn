@@ -1,42 +1,28 @@
 """
-This module enables you to control various instruments over GPIB using
-low-cost `Prologix controllers`_. The interface aims to emulate that
-of PyVISA_, such that :class:`wanglib.prologix.instrument` objects
-can be a drop-in replacement for :func:`visa.instrument`.
 
-.. _`Prologix controllers`: http://prologix.biz/
-.. _PyVISA: http://pyvisa.sourceforge.net/
-
-For example, the canonical PyVISA three-liner
-
-#>>> import visa
-#>>> keithley = visa.instrument("GPIB::12")
-#>>> print keithley.ask("*IDN?")
-
-is just one line longer with :mod:`wanglib.prologix`:
-
-#>>> from wanglib import prologix
-#>>> plx = prologix.prologix_USB('/dev/ttyUSBgpib')
-#>>> keithley = plx.instrument(12)
-#>>> print keithley.ask("*IDN?")
-
-This extra verbosity is necessary to specify which GPIB controller to
-use. Here we are using a Prologix GPIB-USB controller at
-``/dev/ttyUSBgpib``. If we later switch to using a Prologix
-GPIB-Ethernet controller, we would instead use
-
-# >>> plx = prologix.prologix_ethernet('128.223.xxx.xxx')
-
-for our ``plx`` controller object (replace the ``xxx``es
-with the controller's actual ip address, found using the
-Prologix Netfinder tool).
 
 """
 
-#from wanglib.util import Serial
 from serial import Serial
 from socket import socket, AF_INET, SOCK_STREAM, IPPROTO_TCP
 from time import sleep
+
+# The bits in the bitfield mean the following:
+#
+# bit number   if set / if not set
+#     0          binary/ascii
+#     1          double/single (IEEE floating point)
+#     2          big-endian/little-endian
+#
+# This leads to the following constants:
+
+ascii      = 0
+single     = 1
+double     = 3
+big_endian = 4
+
+CR = '\r'
+LF = '\n'
 
 class _prologix_base(object):
     """
@@ -378,3 +364,83 @@ class instrument(object):
         self._get_priority()
         self.controller.write(command, lag=self.delay)
 
+
+class GpibInstrument(Instrument):
+    """Class for GPIB instruments.
+
+    This class extents the Instrument class with special operations and
+    properties of GPIB instruments.
+
+    :param gpib_identifier: strings are interpreted as instrument's VISA resource name.
+                            Numbers are interpreted as GPIB number.
+    :param board_number: the number of the GPIB bus.
+
+    Further keyword arguments are passed to the constructor of class
+    Instrument.
+
+    """
+
+    def __init__(self, gpib_identifier, board_number=0, resource_manager=None, **keyw):
+        warn_for_invalid_kwargs(keyw, Instrument.ALL_KWARGS.keys())
+        if isinstance(gpib_identifier, int):
+            resource_name = "GPIB%d::%d" % (board_number, gpib_identifier)
+        else:
+            resource_name = gpib_identifier
+
+        super(GpibInstrument, self).__init__(resource_name, resource_manager, **keyw)
+
+        # Now check whether the instrument is really valid
+        if self.interface_type != VI_INTF_GPIB:
+            raise ValueError("device is not a GPIB instrument")
+
+        self.visalib.enable_event(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
+
+    def __del__(self):
+        if self.session is not None:
+            self.__switch_events_off()
+            super(GpibInstrument, self).__del__()
+
+    def __switch_events_off(self):
+        self.visalib.disable_event(self.session, VI_ALL_ENABLED_EVENTS, VI_ALL_MECH)
+        self.visalib.vpp43.discard_events(self.session, VI_ALL_ENABLED_EVENTS, VI_ALL_MECH)
+
+    def wait_for_srq(self, timeout=25):
+        """Wait for a serial request (SRQ) coming from the instrument.
+
+        Note that this method is not ended when *another* instrument signals an
+        SRQ, only *this* instrument.
+
+        :param timeout: the maximum waiting time in seconds.
+                        Defaul: 25 (seconds).
+                        None means waiting forever if necessary.
+        """
+        lib = self.visalib
+
+        lib.enable_event(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
+
+        if timeout and not(0 <= timeout <= 4294967):
+            raise ValueError("timeout value is invalid")
+
+        starting_time = time.clock()
+
+        while True:
+            if timeout is None:
+                adjusted_timeout = VI_TMO_INFINITE
+            else:
+                adjusted_timeout = int((starting_time + timeout - time.clock()) * 1000)
+                if adjusted_timeout < 0:
+                    adjusted_timeout = 0
+
+            event_type, context = lib.wait_on_event(self.session, VI_EVENT_SERVICE_REQ,
+                                                    adjusted_timeout)
+            lib.close(context)
+            if self.stb & 0x40:
+                break
+
+        lib.discard_events(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
+
+    @property
+    def stb(self):
+        """Service request status register."""
+
+        return self.visalib.read_stb(self.session)

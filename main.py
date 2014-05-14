@@ -3,6 +3,8 @@ from pylab import *
 from instruments import HP4195
 
 
+
+
 myvna=HP4195(address=17)
 #myvna.reset()
 s11=myvna.s11

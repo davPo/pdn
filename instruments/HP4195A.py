@@ -28,10 +28,6 @@ class HP4195A():
 
     The last parameter is optional. Default is reset=False
 
-    TODO:
-    1. make todo list
-    2. ask Pieter about the purpose of the specific tools
-    3. fix docstrings
     '''
 
     def __init__(self, name, address, reset=False):

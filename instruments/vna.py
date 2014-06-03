@@ -1,13 +1,8 @@
 
 import numpy as npy
-from visa import GpibInstrument
-import visa
 
-import prologix
+from  prologix import *
 
-
-hp4195 = plx.instrument(17)
-print hp4195.ask('ID?')
 from warnings import warn
 
 from skrf.frequency import *
@@ -19,7 +14,7 @@ class HP4195(GpibInstrument):
     HP4195A
     '''
     def __init__(self, address=17,**kwargs):
-        plx = prologix.prologix_ethernet('137.138.62.172')
+        plx = prologix_ethernet('137.138.62.172')
         GpibInstrument.__init__(self,'GPIB::'+str(address),values_format = visa.single|visa.big_endian,**kwargs)
         self.timeout = 30
         self.echo=False

@@ -5,7 +5,13 @@
 
 from serial import Serial
 from socket import socket, AF_INET, SOCK_STREAM, IPPROTO_TCP
-from time import sleep
+from time import sleep,clock
+
+import warnings
+import errors
+from util import (split_kwargs, warn_for_invalid_kwargs,parse_ascii, parse_binary)
+
+# From pyVisa
 
 # The bits in the bitfield mean the following:
 #
@@ -24,6 +30,7 @@ big_endian = 4
 CR = '\r'
 LF = '\n'
 
+#
 class _prologix_base(object):
     """
     Base class for Prologix controllers (ethernet/usb)
@@ -41,6 +48,19 @@ class _prologix_base(object):
         self._addr = self.addr
         self._auto = self.auto
 
+        self._timeout=5 #default timeout value
+
+    @property
+    def timeout(self):
+        """The timeout in seconds for all resource I/O operations.
+        """
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, value):
+        if not(1 <= value <= 30):
+            raise ValueError("timeout value is invalid")
+        self._timeout=int(value)
 
     # use addr to select an instrument by its GPIB address
 
@@ -135,7 +155,7 @@ class _prologix_base(object):
         `addr` -- the GPIB address for an instrument
                   attached to this controller.
         """
-        return instrument(self, addr, **kwargs)
+        return Instrument(self, addr, **kwargs)
 
 class PrologixEthernet(_prologix_base):
     """
@@ -154,7 +174,7 @@ class PrologixEthernet(_prologix_base):
     def __init__(self, ip):
         # open a socket to the controller
         self.bus = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
-        self.bus.settimeout(5)
+        self.bus.settimeout(2)
         self.bus.connect((ip, 1234))
 
         # change to controller mode
@@ -167,8 +187,8 @@ class PrologixEthernet(_prologix_base):
         self.bus.send("%s\n" % command)
         sleep(lag)
 
-    def readall(self):
-        resp = self.bus.recv(100) #100 should be enough, right?
+    def readall(self,chunk_size=100):
+        resp = self.bus.recv(chunk_size) #100 should be enough, right?
         return resp.rstrip()
 
     def ask(self, query, *args, **kwargs):
@@ -256,7 +276,7 @@ def prologix_USB(port='/dev/ttyUSBgpib', log=False):
         controllers[port] = PrologixUSB(port)
     return controllers[port]
 
-class instrument(object):
+class Instrument(object):
     """
     Represents an instrument attached to
     a Prologix controller.
@@ -281,9 +301,38 @@ class instrument(object):
 
     delay = 0.1
     """Seconds to pause after each write."""
+    #From PyVISA
+    """
+    :param timeout: the VISA timeout for each low-level operation in
+                    milliseconds.
+    :param term_chars: the termination characters for this device.
+    :param chunk_size: size of data packets in bytes that are read from the
+                       device.
+    :param ask_delay: waiting time in seconds after each write command.
+                      Default: 0.1
+    :param send_end: whether to assert end line after each write command.
+                     Default: True
+    :param values_format: floating point data value format. Default: ascii (0)
+    """
 
-    def __init__(self, controller, addr,
-                 delay=0.1, auto=True):
+    #: Termination character sequence.
+    __term_chars = None
+
+
+    DEFAULT_KWARGS = {#: Termination character sequence.
+                      'term_chars': None,
+                      #: How many bytes are read per low-level call.
+                      'chunk_size': 20 * 1024,
+                      #: Seconds to wait between write and read operations inside ask.
+                      'ask_delay': 0.1,
+                      'send_end': True,
+                      #: floating point data value format
+                      'values_format': ascii,
+                        # header for binary format
+                      'header': b"#A"
+                        }
+
+    def __init__(self, controller, addr,**kwargs):
         """
         Constructor method for instrument objects.
 
@@ -299,9 +348,12 @@ class instrument(object):
 
         """
         self.addr = addr
-        self.auto = auto
-        self.delay = delay
+        self.auto = False
+        #self.delay = 0.1 # now in kwargs
         self.controller = controller
+
+        for key, value in Instrument.DEFAULT_KWARGS.items():
+            setattr(self, key, kwargs.get(key, value))
 
     def _get_priority(self):
         """
@@ -316,34 +368,34 @@ class instrument(object):
         if self.addr != self.controller._addr:
             self.controller.addr = self.addr
 
-    def ask(self, command):
-        """
-        Send a query the instrument, then read its response.
-
-        Equivalent to :meth:`write` then :meth:`read`.
-
-        For example, get the 'ID' string from an EG&G model
-        5110 lock-in:
-
-        >>> inst.ask('ID')
-        '5110'
-
-        Is the same as:
-
-        >>> inst.write('ID?')
-        >>> inst.read()
-        '5110'
-
-        """
-        # clear stray bytes from the buffer.
-        # hopefully, there will be none.
-        # if there are, print a warning
-#        clrd = self.controller.bus.inWaiting()
-#        if clrd > 0:
-#            print clrd, 'bytes cleared'
-#        self.read()  # clear the buffer
-        self.write(command)
-        return self.read()
+#     def ask(self, command):
+#         """
+#         Send a query the instrument, then read its response.
+#
+#         Equivalent to :meth:`write` then :meth:`read`.
+#
+#         For example, get the 'ID' string from an EG&G model
+#         5110 lock-in:
+#
+#         >>> inst.ask('ID')
+#         '5110'
+#
+#         Is the same as:
+#
+#         >>> inst.write('ID?')
+#         >>> inst.read()
+#         '5110'
+#
+#         """
+#         # clear stray bytes from the buffer.
+#         # hopefully, there will be none.
+#         # if there are, print a warning
+# #        clrd = self.controller.bus.inWaiting()
+# #        if clrd > 0:
+# #            print clrd, 'bytes cleared'
+# #        self.read()  # clear the buffer
+#         self.write(command)
+#         return self.read()
 
     def read(self): # behaves like readall
         """
@@ -353,7 +405,7 @@ class instrument(object):
         self._get_priority()
         if not self.auto:
             # explicitly tell instrument to talk.
-            self.controller.write('++read eoi', lag=self.delay)
+            self.controller.write('++read eoi',self.ask_delay)
         return self.controller.readall()
 
     def write(self, command):
@@ -362,47 +414,226 @@ class instrument(object):
 
         """
         self._get_priority()
-        self.controller.write(command, lag=self.delay)
+        self.controller.write(command, lag=self.ask_delay)
 
 
-class GpibInstrument(Instrument):
-    """Class for GPIB instruments.
+    # From Pyvisa
 
-    This class extents the Instrument class with special operations and
-    properties of GPIB instruments.
+    #FIXME:To correct
+    def write_raw(self, message):
+        """Write a string message to the device.
 
-    :param gpib_identifier: strings are interpreted as instrument's VISA resource name.
-                            Numbers are interpreted as GPIB number.
-    :param board_number: the number of the GPIB bus.
+        The term_chars are appended to it, unless they are already.
 
-    Further keyword arguments are passed to the constructor of class
-    Instrument.
+        :param message: the message to be sent.
+        :type message: bytes
+        :return: number of bytes written.
+        :rtype: int
+        """
 
-    """
+        self._get_priority()
+        self.controller.write(message, lag=self.ask_delay)
 
-    def __init__(self, gpib_identifier, board_number=0, resource_manager=None, **keyw):
-        warn_for_invalid_kwargs(keyw, Instrument.ALL_KWARGS.keys())
-        if isinstance(gpib_identifier, int):
-            resource_name = "GPIB%d::%d" % (board_number, gpib_identifier)
+        return 0
+
+    #FIXME:already defined
+    # def write(self, message):
+    #     """Write a string message to the device.
+    #
+    #     The term_chars are appended to it, unless they are already.
+    #
+    #     :param message: the message to be sent.
+    #     :type message: unicode (Py2) or str (Py3)
+    #     :return: number of bytes written.
+    #     :rtype: int
+    #     """
+    #
+    #     if self.__term_chars and not message.endswith(self.__term_chars):
+    #         message += self.__term_chars
+    #     elif self.__term_chars is None and not message.endswith(CR + LF):
+    #         message += CR + LF
+    #
+    #     count = self.write_raw(message.encode('ascii'))
+    #
+    #     return count
+
+    def _strip_term_chars(self, message):
+        """Strips termination chars from a message
+
+        :type message: str
+        """
+        if self.__term_chars:
+            if message.endswith(self.__term_chars):
+                message = message[:-len(self.__term_chars)]
+            else:
+                warnings.warn("read string doesn't end with "
+                              "termination characters", stacklevel=2)
+
+        return message.rstrip(CR + LF)
+
+    #FIXME:Modified to test
+    def read_raw(self):
+        """Read the unmodified string sent from the instrument to the computer.
+
+        In contrast to read(), no termination characters are checked or
+        stripped. You get the pristine message.
+
+        :rtype: bytes
+
+        """
+        ret = bytes()
+        self._get_priority()
+        if not self.auto:
+            # explicitly tell instrument to talk.
+            self.controller.write('++read eoi', lag=self.ask_delay)
+        ret+= self.controller.readall(self.chunk_size)
+        return ret
+
+    # def read(self):
+    #     """Read a string from the device.
+    #
+    #     Reading stops when the device stops sending (e.g. by setting
+    #     appropriate bus lines), or the termination characters sequence was
+    #     detected.  Attention: Only the last character of the termination
+    #     characters is really used to stop reading, however, the whole sequence
+    #     is compared to the ending of the read string message.  If they don't
+    #     match, a warning is issued.
+    #
+    #     All line-ending characters are stripped from the end of the string.
+    #
+    #     :rtype: str
+    #     """
+    #
+    #     return self._strip_term_chars(self.read_raw().decode('ascii'))
+
+    def read_values(self, fmt=None):
+        """Read a list of floating point values from the device.
+
+        :param fmt: the format of the values.  If given, it overrides
+            the class attribute "values_format".  Possible values are bitwise
+            disjunctions of the above constants ascii, single, double, and
+            big_endian.  Default is ascii.
+
+        :return: the list of read values
+        :rtype: list
+        """
+        if not fmt:
+            fmt = self.values_format
+
+        if fmt & 0x01 == ascii:
+            return parse_ascii(self.read())
+
+        data = self.read_raw()
+        try:
+            if fmt & 0x01 == single: #DPO FIXME
+                is_single = True
+            elif fmt & 0x03 == double:
+                is_single = False
+            else:
+                raise ValueError("unknown data values fmt requested")
+            return parse_binary(data, fmt & 0x04 == big_endian, is_single,self.header)
+        except ValueError as e:
+            raise errors.InvalidBinaryFormat(e.args)
+
+    def ask(self, message, delay=None):
+        """A combination of write(message) and read()
+
+        :param message: the message to send.
+        :type message: str
+        :param delay: delay in seconds between write and read operations.
+                      if None, defaults to self.ask_delay
+        :returns: the answer from the device.
+        :rtype: str
+        """
+        self.write(message)
+        if delay is None:
+            delay = self.ask_delay
+        if delay > 0.0:
+            sleep(delay)
+        return self.read()
+
+
+    def ask_for_values(self, message, format=None, delay=None):
+        """A combination of write(message) and read_values()
+
+        :param message: the message to send.
+        :type message: str
+        :param delay: delay in seconds between write and read operations.
+                      if None, defaults to self.ask_delay
+        :returns: the answer from the device.
+        :rtype: list
+        """
+        self.write(message)
+        if delay is None:
+            delay = self.ask_delay
+        if delay > 0.0:
+            sleep(delay)
+        return self.read_values(format)
+
+    def trigger(self):
+        """Sends a software trigger to the device.
+        """
+
+
+    @property
+    def term_chars(self):
+        """Set or read a new termination character sequence (property).
+
+        Normally, you just give the new termination sequence, which is appended
+        to each write operation (unless it's already there), and expected as
+        the ending mark during each read operation.  A typical example is CR+LF
+        or just CR.  If you assign "" to this property, the termination
+        sequence is deleted.
+
+        The default is None, which means that CR is appended to each write
+        operation but not expected after each read operation (but stripped if
+        present).
+        """
+
+        return self.__term_chars
+
+    @term_chars.setter
+    def term_chars(self, term_chars):
+
+        # First, reset termination characters, in case something bad happens.
+        self.__term_chars = ""
+
+        if term_chars == "" or term_chars is None:
+            self.__term_chars = term_chars
+            return
+            # Only the last character in term_chars is the real low-level
+
+        # termination character, the rest is just used for verification after
+        # each read operation.
+        last_char = term_chars[-1:]
+        # Consequently, it's illogical to have the real termination character
+        # twice in the sequence (otherwise reading would stop prematurely).
+
+        if term_chars[:-1].find(last_char) != -1:
+            raise ValueError("ambiguous ending in termination characters")
+
+        self.__term_chars = term_chars
+
+    @term_chars.deleter
+    def term_chars(self):
+        self.term_chars = None
+
+    @property
+    def send_end(self):
+        """Whether or not to assert EOI (or something equivalent after each
+        write operation.
+        """
+
+        self.controller.write('++eoi')
+        return self.controller.readall()
+
+    @send_end.setter
+    def send_end(self, send):
+        if send is True:
+            self.controller.write('++eoi 1')
         else:
-            resource_name = gpib_identifier
+            self.controller.write('++eoi 0')
 
-        super(GpibInstrument, self).__init__(resource_name, resource_manager, **keyw)
-
-        # Now check whether the instrument is really valid
-        if self.interface_type != VI_INTF_GPIB:
-            raise ValueError("device is not a GPIB instrument")
-
-        self.visalib.enable_event(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
-
-    def __del__(self):
-        if self.session is not None:
-            self.__switch_events_off()
-            super(GpibInstrument, self).__del__()
-
-    def __switch_events_off(self):
-        self.visalib.disable_event(self.session, VI_ALL_ENABLED_EVENTS, VI_ALL_MECH)
-        self.visalib.vpp43.discard_events(self.session, VI_ALL_ENABLED_EVENTS, VI_ALL_MECH)
 
     def wait_for_srq(self, timeout=25):
         """Wait for a serial request (SRQ) coming from the instrument.
@@ -414,33 +645,30 @@ class GpibInstrument(Instrument):
                         Defaul: 25 (seconds).
                         None means waiting forever if necessary.
         """
-        lib = self.visalib
-
-        lib.enable_event(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
 
         if timeout and not(0 <= timeout <= 4294967):
             raise ValueError("timeout value is invalid")
 
-        starting_time = time.clock()
+        starting_time = clock()
 
         while True:
             if timeout is None:
-                adjusted_timeout = VI_TMO_INFINITE
+                pass
+                adjusted_timeout = 10 #VI_TMO_INFINITE
             else:
-                adjusted_timeout = int((starting_time + timeout - time.clock()) * 1000)
+                adjusted_timeout = int((starting_time + timeout - clock()) * 1000)
                 if adjusted_timeout < 0:
                     adjusted_timeout = 0
 
-            event_type, context = lib.wait_on_event(self.session, VI_EVENT_SERVICE_REQ,
-                                                    adjusted_timeout)
-            lib.close(context)
+            #event_type, context = lib.wait_on_event(self.session, VI_EVENT_SERVICE_REQ,adjusted_timeout)
+            #lib.close(context)
             if self.stb & 0x40:
                 break
 
-        lib.discard_events(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
+        #lib.discard_events(self.session, VI_EVENT_SERVICE_REQ, VI_QUEUE)
 
     @property
     def stb(self):
         """Service request status register."""
-
-        return self.visalib.read_stb(self.session)
+        return 1
+        #return self.visalib.read_stb(self.session)

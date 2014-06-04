@@ -3,17 +3,20 @@ from pylab import *
 from instruments import HP4195
 
 
-
-
-myvna=HP4195(address=17)
+myvna=HP4195()
 #myvna.reset()
 s11=myvna.s11
-print s11
-print s11.s_mag
-print s11.s_deg
+#print s11
+#print s11.s_db
+#print s11.s_deg
+
+rf.stylely()
+
+s11.plot_s_db()
 s11.plot_s_deg()
 show()
 
+#print myvna.s22
 
 
 

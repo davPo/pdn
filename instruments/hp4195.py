@@ -1,7 +1,7 @@
 
 import numpy as npy
 
-from  prologix import *
+from prologix import *
 
 from warnings import warn
 
@@ -9,26 +9,14 @@ from skrf.frequency import *
 from skrf.network import *
 from skrf import mathFunctions as mf
 
-class HP4195(GpibInstrument):
+class HP4195():
     '''
     HP4195A
     '''
-    def __init__(self, address=17,**kwargs):
-        plx = prologix_ethernet('137.138.62.172')
-        GpibInstrument.__init__(self,'GPIB::'+str(address),values_format = visa.single|visa.big_endian,**kwargs)
-        self.timeout = 30
-        self.echo=False
-
-    def write(self, msg, *args, **kwargs):
-        '''
-        Write a msg to the instrument.
-        Overload pyvisa method
-        '''
-        if self.echo:
-            print msg
-        return GpibInstrument.write(self,msg, *args, **kwargs)
-
-    write.__doc__ = GpibInstrument.write.__doc__
+    def __init__(self, ip_prologix='137.138.62.172',gpib_address=17,**kwargs):
+        self.plx = prologix_ethernet(ip_prologix)
+        self.inst = self.plx.instrument(gpib_address,values_format = single|big_endian)
+        self.inst.timeout = 30
 
     ## BASIC GPIB
     @property
@@ -36,24 +24,24 @@ class HP4195(GpibInstrument):
         '''
         Identifying string for the instrument
         '''
-        return self.ask('ID?')
+        return self.inst.ask('ID?')
 
     @property
     def status(self):
         '''
         Ask for indication that operations complete
         '''
-        return self.ask('STB?')
+        return self.inst.ask('STB?')
 
     def reset(self):
         '''
         reset
         '''
-        self.write('RST;')
+        self.inst.write('RST;')
 
     @property
     def error(self):
-        return self.ask('ERR?')
+        return self.inst.ask('ERR?')
 
     ## TRIGGER
 
@@ -67,7 +55,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWM1')
+        self.inst.write('SWM1')
 
     def set_trigger_single(self):
         '''
@@ -80,7 +68,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWM2')
+        self.inst.write('SWM2')
 
     def set_trigger_manual(self):
         '''
@@ -92,7 +80,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWM3')
+        self.inst.write('SWM3')
 
     def send_trigger(self):
         '''
@@ -104,7 +92,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWTRG')
+        self.inst.write('SWTRG')
 
     def trigger_and_wait_till_done(self):
         '''
@@ -139,13 +127,13 @@ class HP4195(GpibInstrument):
     @averaging.setter
     def averaging(self, factor ):
         raise NotImplementedError
-        #self.write('AVERON %i;'%factor )
+        #self.inst.write('AVERON %i;'%factor )
 
     @property
     def frequency(self, unit='hz'):
-        freq=Frequency( float(self.ask('FMT1;START?')),\
-                float(self.ask('FMT1;STOP?')),\
-                int(float(self.ask('FMT1;NOP?'))),\
+        freq=Frequency( float(self.inst.ask('FMT1;START?')),\
+                float(self.inst.ask('FMT1;STOP?')),\
+                int(float(self.inst.ask('FMT1;NOP?'))),\
                 'hz')
         freq.unit = unit
         return freq
@@ -161,7 +149,7 @@ class HP4195(GpibInstrument):
             data (32 bits float)  : list of data points
         '''
         command="FMT3;%s?" %(register)
-        data = self.ask_for_values(command)
+        data = self.inst.ask_for_values(command)
         return data
 
 
@@ -175,7 +163,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC1')
+        self.inst.write('FNC1')
 
 
     def set_measurement_spectrum(self):
@@ -188,7 +176,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC2')
+        self.inst.write('FNC2')
 
     def set_measurement_impedance(self):
         '''
@@ -200,7 +188,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC3')
+        self.inst.write('FNC3')
 
     def set_measurement_S11(self):
         '''
@@ -212,7 +200,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC4')
+        self.inst.write('FNC4')
 
     def set_measurement_S22(self):
         '''
@@ -224,7 +212,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC7')
+        self.inst.write('FNC7')
 
     def set_measurement_S12(self):
         '''
@@ -236,7 +224,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC6')
+        self.inst.write('FNC6')
 
     def set_measurement_S21(self):
         '''
@@ -248,7 +236,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('FNC5')
+        self.inst.write('FNC5')
 
     def set_lin_freq(self):
         '''
@@ -260,7 +248,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWT1')
+        self.inst.write('SWT1')
 
     def set_log_freq(self):
         '''
@@ -272,7 +260,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SWT2')
+        self.inst.write('SWT2')
     ### parameters
 
     @property
@@ -280,7 +268,7 @@ class HP4195(GpibInstrument):
         '''
         Get sweep time from device
         '''
-        return float(self.ask('FMT1;ST?'))
+        return float(self.inst.ask('FMT1;ST?'))
 
     @property
     def resbw(self):
@@ -293,7 +281,7 @@ class HP4195(GpibInstrument):
         Output:
             bandwidth (float)   : Resolution bandwidth
         '''
-        return self.ask('FMT1;RBW?')
+        return self.inst.ask('FMT1;RBW?')
 
     @resbw.setter
     def resbw(self, bw):
@@ -307,7 +295,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('RBW=%f' %bw)
+        self.inst.write('RBW=%f' %bw)
 
 
     @property
@@ -321,7 +309,7 @@ class HP4195(GpibInstrument):
         Output:
             numpoints (int) : Number of points in trace
         '''
-        return self.ask('FMT1;NOP?')
+        return self.inst.ask('FMT1;NOP?')
 
     @numpoints.setter
     def numpoints(self, numpts):
@@ -335,7 +323,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('NOP=%f' %numpts)
+        self.inst.write('NOP=%f' %numpts)
 
 
     @property
@@ -349,8 +337,8 @@ class HP4195(GpibInstrument):
         Output:
             freq (float)    : Start frequency
         '''
-        #return float(self.ask('FMT1;START?'))
-        return self.ask('FMT1;START?')
+        #return float(self.inst.ask('FMT1;START?'))
+        return self.inst.ask('FMT1;START?')
 
     @start_freq.setter
     def start_freq(self, freq):
@@ -363,7 +351,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('START=%f' %freq)
+        self.inst.write('START=%f' %freq)
 
     @property
     def stop_freq(self):
@@ -376,7 +364,7 @@ class HP4195(GpibInstrument):
         Output:
             freq (float)    : Stop frequency
         '''
-        return (self.ask('FMT1;STOP?'))
+        return (self.inst.ask('FMT1;STOP?'))
 
     @stop_freq.setter
     def stop_freq(self, freq):
@@ -389,7 +377,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('STOP=%f' %freq)
+        self.inst.write('STOP=%f' %freq)
 
     @property
     def center_freq(self):
@@ -402,7 +390,7 @@ class HP4195(GpibInstrument):
         Output:
             freq (float) : Center Frequency
         '''
-        return float(self.ask('FMT1;CENTER?'))
+        return float(self.inst.ask('FMT1;CENTER?'))
 
     @center_freq.setter
     def center_freq(self, freq):
@@ -415,7 +403,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('CENTER=%f' %freq)
+        self.inst.write('CENTER=%f' %freq)
 
 
     @property
@@ -429,7 +417,7 @@ class HP4195(GpibInstrument):
         Output:
             freq (float) : Span frequency
         '''
-        return float(self.ask('FMT1;SPAN?'))
+        return float(self.inst.ask('FMT1;SPAN?'))
 
     @span_freq.setter
     def span_freq(self, freq):
@@ -442,7 +430,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('SPAN=%f' %freq)
+        self.inst.write('SPAN=%f' %freq)
 
     @property
     def power(self):
@@ -455,7 +443,7 @@ class HP4195(GpibInstrument):
         Output:
             pow (float) : Power
         '''
-        return float(self.ask('FMT1;OSC1?'))
+        return float(self.inst.ask('FMT1;OSC1?'))
 
 
     @power.setter
@@ -469,7 +457,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('OSC1=%f' % pow)
+        self.inst.write('OSC1=%f' % pow)
 
     @property
     def att_r1(self):
@@ -482,7 +470,7 @@ class HP4195(GpibInstrument):
         Output:
             att (dB): port r1 attenuation
         '''
-        return int(float(self.ask('FMT1;ATR1?')))
+        return int(float(self.inst.ask('FMT1;ATR1?')))
 
     @att_r1.setter
     def att_r1(self,att):
@@ -496,7 +484,7 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('ATR1=%f' %att)
+        self.inst.write('ATR1=%f' %att)
 
     @property
     def att_t1(self):
@@ -509,7 +497,7 @@ class HP4195(GpibInstrument):
         Output:
             att (dB): port t1 attenuation
         '''
-        return int(float(self.ask('FMT1;ATT1?')))
+        return int(float(self.inst.ask('FMT1;ATT1?')))
 
     @att_t1.setter
     def att_t1(self,att):
@@ -523,32 +511,24 @@ class HP4195(GpibInstrument):
         Output:
             None
         '''
-        self.write('ATT1=%f' %att)
+        self.inst.write('ATT1=%f' %att)
 
     
     @property
     def one_port(self):
         '''
-        Initiates a sweep and returns a  Network type represting the
+        Initiates a sweep and returns a  Network type representing the
         data.
         '''
-        self.continuous = False
-        self.send_trigger()
-        db_data = npy.array(self.read_register('A')) #MAG
-        deg_data = npy.array(self.read_register('B')) #Phase
-
-        data=npy.vstack((db_data,deg_data))
-        data.shape=(-1,2)                                                                                        #ordering the data hopefully for integration into a skrf network
-        #print data
-        #print data.shape
-        blah_spar=data[:,0]+1j*data[:,1]                                                                   #stolen from the skrf vna lib
-        blah_spar.shape=(-1,1,1)
+        self.continuous = False #VNA single sweep mode
+        self.send_trigger() #VNA trigger one time
+        db_data = npy.array(self.read_register('A')) #MAG in Db
+        deg_data = npy.array(self.read_register('B')) #Phase in Deg
+        data=mf.dbdeg_2_reim(db_data,deg_data) # convert to Re/Im array
         ntwk = Network()
-        ntwk.s = blah_spar
-        #ntwk.s_db=db_data
-        #ntwk.s_deg=deg_data
-        ntwk.frequency= self.frequency
-        self.continuous  = True
+        ntwk.s =data.reshape(-1,1,1) # fxnxn format for 1 port Network.s definition
+        ntwk.frequency= self.frequency # add frequency points
+        self.continuous  = True # VNA back to continous sweep
         return ntwk
 
     @property
@@ -622,12 +602,12 @@ class HP4195(GpibInstrument):
     #
     #     '''
     #     print('forward')
-    #     self.write('USER2;DRIVPORT1;LOCKA1;NUMEB2;DENOA2;CONV1S;')
+    #     self.inst.write('USER2;DRIVPORT1;LOCKA1;NUMEB2;DENOA2;CONV1S;')
     #     forward = self.one_port
     #     forward.name = 'forward switch term'
     #
     #     print ('reverse')
-    #     self.write('USER1;DRIVPORT2;LOCKA2;NUMEB1;DENOA1;CONV1S;')
+    #     self.inst.write('USER1;DRIVPORT2;LOCKA2;NUMEB1;DENOA1;CONV1S;')
     #     reverse = self.one_port
     #     reverse.name = 'reverse switch term'
     #

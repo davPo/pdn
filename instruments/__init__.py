@@ -1,3 +1,3 @@
 __author__ = 'dp'
 
-from vna import HP4195
+from hp4195 import HP4195

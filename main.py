@@ -2,37 +2,35 @@ import skrf as rf
 from pylab import *
 from instruments import HP4195
 
-
 myvna=HP4195()
 #myvna.reset()
 s11=myvna.s11
-#print s11
-#print s11.s_db
-#print s11.s_deg
+s11.comments='VddCM'
+s11.name="Z11"
 
-rf.stylely()
 
+# s11.comments='VddCM'
+# s11.name="Z11"
+# figure()
+# s11.plot_s_db(label= 'Mag(db)')
+# s11.plot_s_deg(label= 'Phase(deg)')
+# show()
+
+# Saving to file
+# --------------
+s11.write_touchstone('test','./results/',False,True)
+# Plotting
+# --------
+rf.stylely() # matplotlib custom style from skrf.mplstyle
+figure(figsize=(8,4))
+subplot(221)
 s11.plot_s_db()
+title('Z11 Magnitude')
+subplot(222)
 s11.plot_s_deg()
+title('Z11 Phase')
+tight_layout()
+subplot(223)
+title('Z mag')
+s11.plot_z_mag()
 show()
-
-#print myvna.s22
-
-
-
-#data=traceA[1][1:100]+1j*(traceB[1][1:100])
-#print data
-#print traceA[0].shape
-#impedance=rf.network.Network(name='Z_PDN',comments='4W_Z11')
-#impedance.f, impedance.z,impedance.z0 = traceA[0][1:100],data,[50+0.j]
-#impedance.z.
-#impedance.f=traceA[0]
-#impedance.z=traceA[1]
-#impedance.s_deg=traceB[1]
-#print impedance.z_mag
-#impedance.plot_it_all()
-
-#impedance.plot_z_mag()
-#impedance.plot_s_deg()
-#plot=rf.plotting.plot_rectangular(impedance.f,x_label='F',y_label='Ohms',title='PDN meas',show_legend=True, axis='tight', ax=None)
-#show()

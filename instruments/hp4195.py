@@ -520,15 +520,15 @@ class HP4195():
         Initiates a sweep and returns a  Network type representing the
         data.
         '''
-        self.continuous = False #VNA single sweep mode
-        self.send_trigger() #VNA trigger one time
+        #self.continuous = False #VNA single sweep mode
+        #self.send_trigger() #VNA trigger one time
         db_data = npy.array(self.read_register('A')) #MAG in Db
         deg_data = npy.array(self.read_register('B')) #Phase in Deg
         data=mf.dbdeg_2_reim(db_data,deg_data) # convert to Re/Im array
         ntwk = Network()
         ntwk.s =data.reshape(-1,1,1) # fxnxn format for 1 port Network.s definition
         ntwk.frequency= self.frequency # add frequency points
-        self.continuous  = True # VNA back to continous sweep
+        #self.continuous  = True # VNA back to continous sweep
         return ntwk
 
     @property
